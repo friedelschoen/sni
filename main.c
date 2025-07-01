@@ -1,5 +1,6 @@
 #include "arg.h"
 
+#include <ctype.h>
 #include <endian.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -37,6 +38,7 @@ struct depencency {
 const char       *self;
 struct depencency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
 int               dependency_count = 0;
+int               terminating      = 0;
 
 pid_t  process       = 0;
 time_t status_change = 0;
@@ -109,12 +111,12 @@ int has_lock(const char *path) {
 	else
 		snprintf(lockpath, sizeof(lockpath), "../%s/supervise/lock", path);
 
-	FILE *lock = fopen(lockpath, "r");
-	if (!lock)
-		return 0;
+	int lockfd = open(lockpath, O_WRONLY);
+	if (lockfd == -1)
+		return 1;
 
-	int ret = lockf(fileno(lock), F_TEST, 0) != 0;
-	fclose(lock);
+	int ret = lockf(lockfd, F_TEST, 0) != 0;
+	close(lockfd);
 	return ret;
 }
 
@@ -130,11 +132,24 @@ pid_t must_fork(void) {
 	return pid;
 }
 
+char *strip(char *origin) {
+	char *comment = strchr(origin, '#');
+	if (comment != NULL) {
+		*comment = '\0';
+	}
+
+	while (isspace(origin[0]))
+		origin++;
+	if (origin[0] == '\0')
+		return origin;
+
+	for (char *c = strchr(origin, '\0') - 1; isspace(*c) && c >= origin; c--)
+		*c = '\0';
+	return origin;
+}
+
 void reload_dependencies(void) {
 	FOREACH_DEP(i) {
-		if (dependencies[i].pid == -1)
-			continue;
-
 		dependencies[i].enlisted = 0;
 	}
 
@@ -142,13 +157,17 @@ void reload_dependencies(void) {
 	if (!file)
 		return;
 
-	char line[NAME_MAX];
+	char line[LINE_MAX];
 	char path[LINE_MAX];
 	while (fgets(line, sizeof(line), file)) {
 		line[strcspn(line, "\n")] = '\0';
 
+		char *name = strip(line);
+		if (name[0] == '\0')
+			continue;
+
 		FOREACH_DEP(i) {
-			if (strcmp(line, dependencies[i].name)) {
+			if (!strcmp(line, dependencies[i].name)) {
 				dependencies[i].enlisted = 1;
 			}
 		}
@@ -162,6 +181,10 @@ void reload_dependencies(void) {
 			continue;
 
 		snprintf(path, sizeof(path), "../%s", line);
+
+		if (access(path, R_OK) != 0) {
+			continue;
+		}
 
 		pid_t pid = must_fork();
 		if (pid == 0) {
@@ -181,13 +204,14 @@ void reload_dependencies(void) {
 		}
 		dependency_count++;
 	}
+	fclose(file);
 
 	FOREACH_DEP(i) {
-		if (!dependencies[i].enlisted)
-			kill(dependencies[i].pid, SIGTERM);
+		if (dependencies[i].enlisted)
+			continue;
+		printf("killing %s (pid %d)\n", dependencies[i].name, dependencies[i].pid);
+		kill(dependencies[i].pid, SIGTERM);
 	}
-
-	fclose(file);
 }
 
 void start_process(void) {
@@ -223,6 +247,9 @@ void usage(int code) {
 }
 
 void on_sigchild(int signo) {
+	if (terminating)
+		return;
+
 	int   status;
 	pid_t killed;
 	(void) signo;
@@ -264,6 +291,8 @@ void on_sigusr1(int signo) {
 }
 
 void on_sigalarm(int signo) {
+	if (terminating)
+		return;
 	(void) signo;
 	reload_dependencies();
 	alarm(1);
@@ -335,7 +364,6 @@ void read_control_loop(void) {
 		while ((n = read(fd, &c, 1)) != 0) {
 			if (n == -1 && errno != EINTR) {
 				break;
-				;
 			}
 			handle_command(c);
 		}
@@ -344,17 +372,49 @@ void read_control_loop(void) {
 	}
 }
 
+void shutdown_supervisor(void) {
+	do_restart = 0;
+
+	FOREACH_DEP(i) {
+		if (dependencies[i].pid != -1) {
+			kill(dependencies[i].pid, SIGTERM);
+			waitpid(dependencies[i].pid, NULL, 0);
+			dependencies[i].pid = -1;
+		}
+	}
+
+	if (process != 0) {
+		kill(process, SIGTERM);
+		waitpid(process, NULL, 0);
+		process       = 0;
+		status_change = time(NULL);
+		write_status();
+	}
+}
+
+void on_sigterm(int signo) {
+	(void) signo;
+	fprintf(stderr, "received termination signal, shutting down...\n");
+	terminating = 1;
+	shutdown_supervisor();
+	exit(0);
+}
+
 int main(int argc, char **argv) {
 	self          = argv[0];
 	status_change = time(NULL);
 
 	for (int i = 0; i < MAX_DEPENDENCIES; i++) {
-		dependencies[i].pid = -1;
+		dependencies[i].pid      = -1;
+		dependencies[i].enlisted = 0;
 	}
 
 	signal(SIGCHLD, on_sigchild);
 	signal(SIGUSR1, on_sigusr1);
 	signal(SIGALRM, on_sigalarm);
+	signal(SIGTERM, on_sigterm);
+	signal(SIGINT, on_sigterm);
+	signal(SIGQUIT, on_sigterm);
 
 	const char *dir;
 	ARGBEGIN
@@ -375,8 +435,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (has_lock(NULL)) {
-		fprintf(stderr, "lock already held\n");
-		return 2;
+		return 0;
 	}
 
 	mkfifo("supervise/ok", 0600);
@@ -404,6 +463,7 @@ int main(int argc, char **argv) {
 	reload_dependencies();
 	start_process();
 
+	alarm(1);
 	read_control_loop();
 
 	// on exit
