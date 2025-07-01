@@ -20,9 +20,23 @@
 #define MAX_DEPENDENCIES 128
 #define LINE_MAX         512
 
-const char *self;
-pid_t       dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
-int         dependency_count = 0;
+#define FOREACH_DEP(i)                                                              \
+	for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) \
+		if (dependencies[i].pid == -1)                                              \
+			continue;                                                               \
+		else                                                                        \
+			for (int __once = (hits++, 0); __once < 1; __once++)
+
+
+struct depencency {
+	pid_t pid;
+	char  name[NAME_MAX];
+	int   enlisted; /* is seen */
+};
+
+const char       *self;
+struct depencency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
+int               dependency_count = 0;
 
 pid_t  process       = 0;
 time_t status_change = 0;
@@ -117,21 +131,27 @@ pid_t must_fork(void) {
 }
 
 void reload_dependencies(void) {
-	for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) {
-		if (dependencies[i] == -1)
+	FOREACH_DEP(i) {
+		if (dependencies[i].pid == -1)
 			continue;
 
-		kill(dependencies[i], SIGUSR1);
+		dependencies[i].enlisted = 0;
 	}
 
 	FILE *file = fopen("depends", "r");
 	if (!file)
 		return;
 
-	char line[LINE_MAX];
+	char line[NAME_MAX];
 	char path[LINE_MAX];
 	while (fgets(line, sizeof(line), file)) {
 		line[strcspn(line, "\n")] = '\0';
+
+		FOREACH_DEP(i) {
+			if (strcmp(line, dependencies[i].name)) {
+				dependencies[i].enlisted = 1;
+			}
+		}
 
 		if (dependency_count >= MAX_DEPENDENCIES) {
 			fprintf(stderr, "too many dependencies, stopping at %s\n", line);
@@ -152,12 +172,19 @@ void reload_dependencies(void) {
 		}
 
 		for (int i = 0; i < MAX_DEPENDENCIES; i++) {
-			if (dependencies[i] != -1)
+			if (dependencies[i].pid != -1)
 				continue;
-			dependencies[i] = pid;
+			dependencies[i].pid = pid;
+			strncpy(dependencies[i].name, line, sizeof(dependencies[i].name));
+			dependencies[i].enlisted = 1;
 			break;
 		}
 		dependency_count++;
+	}
+
+	FOREACH_DEP(i) {
+		if (!dependencies[i].enlisted)
+			kill(dependencies[i].pid, SIGTERM);
 	}
 
 	fclose(file);
@@ -215,11 +242,12 @@ void on_sigchild(int signo) {
 
 		// Was it a dependency?
 		int is_dependency = 0;
-		for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) {
-			if (dependencies[i] == killed) {
-				dependencies[i] = -1;
+		FOREACH_DEP(i) {
+			if (dependencies[i].pid == killed) {
+				dependencies[i].pid = -1;
 				dependency_count--;
-				is_dependency = 1;
+				if (dependencies[i].enlisted)
+					is_dependency = 1;
 				break;
 			}
 		}
@@ -235,7 +263,14 @@ void on_sigusr1(int signo) {
 	reload_dependencies();
 }
 
-void handle_command(int chr) {
+void on_sigalarm(int signo) {
+	(void) signo;
+	reload_dependencies();
+	alarm(1);
+}
+
+void handle_command(char chr) {
+	fprintf(stderr, "command %c\n", chr);
 	switch (chr) {
 		case 'u':
 			do_restart = 1;
@@ -278,24 +313,19 @@ void handle_command(int chr) {
 			break;
 		case 'x':
 			exit(0);
-		case 'y':
-			sigblock(SIGCHLD);
-			for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) {
-				if (dependencies[i] == -1)
-					continue;
-
-				kill(dependencies[i], SIGTERM);
-				dependencies[i] = -1;
-			}
-			dependency_count = 0;
-			sigblock(0);
+			break;
 	}
 }
 
 void read_control_loop(void) {
+	int fd;
 	for (;;) {
-		int fd = open("supervise/control", O_RDONLY);
-		if (fd < 0) {
+		/* if this directory does not exist anymore, exit. */
+		if (access(".", R_OK) != 0) {
+			return;
+		}
+
+		if ((fd = open("supervise/control", O_RDONLY)) == -1) {
 			perror("open control");
 			sleep(1);
 			continue;
@@ -303,8 +333,9 @@ void read_control_loop(void) {
 
 		int c, n;
 		while ((n = read(fd, &c, 1)) != 0) {
-			if (n == -1 && errno == EINTR) {
-				continue;
+			if (n == -1 && errno != EINTR) {
+				break;
+				;
 			}
 			handle_command(c);
 		}
@@ -318,11 +349,12 @@ int main(int argc, char **argv) {
 	status_change = time(NULL);
 
 	for (int i = 0; i < MAX_DEPENDENCIES; i++) {
-		dependencies[i] = -1;
+		dependencies[i].pid = -1;
 	}
 
 	signal(SIGCHLD, on_sigchild);
 	signal(SIGUSR1, on_sigusr1);
+	signal(SIGALRM, on_sigalarm);
 
 	const char *dir;
 	ARGBEGIN
