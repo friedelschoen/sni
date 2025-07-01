@@ -65,6 +65,27 @@ void write_status(void) {
 	}
 	fwrite(buffer, sizeof(buffer), 1, f);
 	fclose(f);
+
+
+	f = fopen("supervise/stat", "w");
+	if (!f) {
+		perror("fopen status");
+		return;
+	}
+	if (process == 0) {
+		fprintf(f, "down");
+	} else {
+		fprintf(f, "run");
+	}
+	fclose(f);
+
+	f = fopen("supervise/pid", "w");
+	if (!f) {
+		perror("fopen status");
+		return;
+	}
+	fprintf(f, "%d", process);
+	fclose(f);
 }
 
 int has_lock(const char *path) {
@@ -162,11 +183,11 @@ void start_process(void) {
 	write_status();
 }
 
-void stop_process(void) {
-	if (process > 0) {
-		kill(process, SIGTERM);
-		waitpid(process, NULL, 0);
-	}
+void stop_process(int sig) {
+	if (process == 0)
+		return;
+
+	kill(process, sig);
 }
 
 void usage(int code) {
@@ -185,8 +206,10 @@ void on_sigchild(int signo) {
 			process       = 0;
 			status_change = time(NULL);
 			write_status();
-			if (do_restart)
+			if (do_restart) {
+				sleep(1);
 				start_process();
+			}
 			continue;
 		}
 
@@ -212,6 +235,63 @@ void on_sigusr1(int signo) {
 	reload_dependencies();
 }
 
+void handle_command(int chr) {
+	switch (chr) {
+		case 'u':
+			do_restart = 1;
+			start_process();
+			break;
+		case 'd':
+			do_restart = 0;
+			stop_process(SIGTERM);
+			break;
+		case 'o':
+			do_restart = 0;
+			start_process();
+			break;
+		case 't':
+			stop_process(SIGTERM);
+			break;
+		case 'p':
+			stop_process(SIGSTOP);
+			break;
+		case 'c':
+			stop_process(SIGCONT);
+			break;
+		case 'a':
+			stop_process(SIGALRM);
+			break;
+		case 'h':
+			stop_process(SIGHUP);
+			break;
+		case 'i':
+			stop_process(SIGINT);
+			break;
+		case 'q':
+			stop_process(SIGQUIT);
+			break;
+		case '1':
+			stop_process(SIGUSR1);
+			break;
+		case '2':
+			stop_process(SIGUSR2);
+			break;
+		case 'x':
+			exit(0);
+		case 'y':
+			sigblock(SIGCHLD);
+			for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) {
+				if (dependencies[i] == -1)
+					continue;
+
+				kill(dependencies[i], SIGTERM);
+				dependencies[i] = -1;
+			}
+			dependency_count = 0;
+			sigblock(0);
+	}
+}
+
 void read_control_loop(void) {
 	for (;;) {
 		int fd = open("supervise/control", O_RDONLY);
@@ -226,16 +306,7 @@ void read_control_loop(void) {
 			if (n == -1 && errno == EINTR) {
 				continue;
 			}
-			switch (c) {
-				case 'u':
-					do_restart = 1;
-					start_process();
-					break;
-				case 'd':
-					do_restart = 0;
-					stop_process();
-					break;
-			}
+			handle_command(c);
 		}
 
 		close(fd);
@@ -278,10 +349,6 @@ int main(int argc, char **argv) {
 
 	mkfifo("supervise/ok", 0600);
 	mkfifo("supervise/control", 0600);
-
-	if (access("down", R_OK) == 0) {
-		do_restart = 0;
-	}
 
 	int lockfd = open("supervise/lock", O_WRONLY | O_CREAT, 0600);
 	if (lockfd == -1) {
