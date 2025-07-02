@@ -40,6 +40,7 @@ pid_t  process       = 0;
 time_t status_change = 0;
 int    do_restart    = 1;
 int    exitstatus    = 0;
+int    paused        = 0;
 
 time_t depends_mtime = 0;
 
@@ -47,6 +48,7 @@ void write_status(void) {
 	char     buffer[20];
 	uint64_t tai = status_change + TAI_OFFSET;
 
+	/* seconds (TAI) since status-change */
 	buffer[0] = (tai >> 56) & 0xff;
 	buffer[1] = (tai >> 48) & 0xff;
 	buffer[2] = (tai >> 40) & 0xff;
@@ -56,20 +58,26 @@ void write_status(void) {
 	buffer[6] = (tai >> 8) & 0xff;
 	buffer[7] = (tai >> 0) & 0xff;
 
+	/* micro-seconds, not that interesting... */
 	buffer[8]  = 0;
 	buffer[9]  = 0;
 	buffer[10] = 0;
 	buffer[11] = 0;
 
+	/* PID */
 	buffer[15] = (process >> 24) & 0xff;
 	buffer[14] = (process >> 16) & 0xff;
 	buffer[13] = (process >> 8) & 0xff;
 	buffer[12] = (process >> 0) & 0xff;
 
-	buffer[16] = WIFSTOPPED(exitstatus);  /* paused */
-	buffer[17] = do_restart ? 'u' : 'd';  /* wants up/down */
-	buffer[18] = WIFSIGNALED(exitstatus); /* was terminated */
-	buffer[19] = process != 0;            /* runit-state */
+	/* paused */
+	buffer[16] = paused;
+	/* wants up/down */
+	buffer[17] = do_restart ? 'u' : 'd';
+	/* was terminated */
+	buffer[18] = WIFSIGNALED(exitstatus) && WTERMSIG(exitstatus) == SIGTERM;
+	/* runit-state */
+	buffer[19] = process != 0;
 
 
 	FILE *f = fopen("supervise/status", "w");
@@ -263,6 +271,7 @@ void on_sigchild(int signo) {
 		if (killed == process) {
 			exitstatus    = status;
 			process       = 0;
+			paused        = 0;
 			status_change = time(NULL);
 			write_status();
 			if (do_restart) {
@@ -342,9 +351,11 @@ void handle_command(char chr) {
 			stop_process(SIGTERM);
 			break;
 		case 'p':
+			paused = 1;
 			stop_process(SIGSTOP);
 			break;
 		case 'c':
+			paused = 0;
 			stop_process(SIGCONT);
 			break;
 		case 'a':
