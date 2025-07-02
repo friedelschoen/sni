@@ -45,6 +45,8 @@ time_t status_change = 0;
 int    do_restart    = 1;
 int    exitstatus    = 0;
 
+time_t depends_mtime = 0;
+
 void write_status(void) {
 	char     buffer[20];
 	uint64_t tai = status_change + TAI_OFFSET;
@@ -113,7 +115,7 @@ int has_lock(const char *path) {
 
 	int lockfd = open(lockpath, O_WRONLY);
 	if (lockfd == -1)
-		return 1;
+		return 0;
 
 	int ret = lockf(lockfd, F_TEST, 0) != 0;
 	close(lockfd);
@@ -149,6 +151,13 @@ char *strip(char *origin) {
 }
 
 void reload_dependencies(void) {
+	struct stat filestat;
+	if (stat("depends", &filestat) == -1)
+		return;
+
+	if (filestat.st_mtim.tv_sec <= depends_mtime)
+		return;
+
 	FOREACH_DEP(i) {
 		dependencies[i].enlisted = 0;
 	}
