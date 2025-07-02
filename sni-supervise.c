@@ -44,6 +44,35 @@ int    paused        = 0;
 
 time_t depends_mtime = 0;
 
+
+pid_t must_fork(void) {
+	pid_t pid;
+	for (;;) {
+		pid = fork();
+		if (pid != -1)
+			break;
+		fprintf(stderr, "unable to fork: %s, waiting...\n", strerror(errno));
+		sleep(1);
+	}
+	return pid;
+}
+
+char *strip(char *origin) {
+	char *comment = strchr(origin, '#');
+	if (comment != NULL) {
+		*comment = '\0';
+	}
+
+	while (isspace(origin[0]))
+		origin++;
+	if (origin[0] == '\0')
+		return origin;
+
+	for (char *c = strchr(origin, '\0') - 1; isspace(*c) && c >= origin; c--)
+		*c = '\0';
+	return origin;
+}
+
 void write_status(void) {
 	char     buffer[20];
 	uint64_t tai = status_change + TAI_OFFSET;
@@ -124,34 +153,6 @@ int has_lock(const char *path) {
 	int ret = lockf(lockfd, F_TEST, 0) != 0;
 	close(lockfd);
 	return ret;
-}
-
-pid_t must_fork(void) {
-	pid_t pid;
-	for (;;) {
-		pid = fork();
-		if (pid != -1)
-			break;
-		fprintf(stderr, "unable to fork: %s, waiting...\n", strerror(errno));
-		sleep(1);
-	}
-	return pid;
-}
-
-char *strip(char *origin) {
-	char *comment = strchr(origin, '#');
-	if (comment != NULL) {
-		*comment = '\0';
-	}
-
-	while (isspace(origin[0]))
-		origin++;
-	if (origin[0] == '\0')
-		return origin;
-
-	for (char *c = strchr(origin, '\0') - 1; isspace(*c) && c >= origin; c--)
-		*c = '\0';
-	return origin;
 }
 
 void reload_dependencies(void) {
@@ -254,64 +255,6 @@ void stop_process(int sig) {
 	kill(process, sig);
 }
 
-void usage(int code) {
-	fprintf(stderr, "sni-supervise [-C dir]");
-	exit(code);
-}
-
-void on_sigchild(int signo) {
-	if (terminating)
-		return;
-
-	int   status;
-	pid_t killed;
-	(void) signo;
-
-	while ((killed = waitpid(-1, &status, WNOHANG)) > 0) {
-		if (killed == process) {
-			exitstatus    = status;
-			process       = 0;
-			paused        = 0;
-			status_change = time(NULL);
-			write_status();
-			if (do_restart) {
-				sleep(1);
-				start_process();
-			}
-			continue;
-		}
-
-		// Was it a dependency?
-		int is_dependency = 0;
-		FOREACH_DEP(i) {
-			if (dependencies[i].pid == killed) {
-				dependencies[i].pid = -1;
-				dependency_count--;
-				if (dependencies[i].enlisted)
-					is_dependency = 1;
-				break;
-			}
-		}
-		if (is_dependency) {
-			fprintf(stderr, "dependency exited, reloading depends...\n");
-			reload_dependencies();
-		}
-	}
-}
-
-void on_sigusr1(int signo) {
-	(void) signo;
-	reload_dependencies();
-}
-
-void on_sigalarm(int signo) {
-	if (terminating)
-		return;
-	(void) signo;
-	reload_dependencies();
-	alarm(1);
-}
-
 void shutdown_supervisor(void) {
 	do_restart = 0;
 
@@ -406,6 +349,64 @@ void read_control_loop(void) {
 
 		close(fd);
 	}
+}
+
+void usage(int code) {
+	fprintf(stderr, "sni-supervise [-C dir]");
+	exit(code);
+}
+
+void on_sigchild(int signo) {
+	if (terminating)
+		return;
+
+	int   status;
+	pid_t killed;
+	(void) signo;
+
+	while ((killed = waitpid(-1, &status, WNOHANG)) > 0) {
+		if (killed == process) {
+			exitstatus    = status;
+			process       = 0;
+			paused        = 0;
+			status_change = time(NULL);
+			write_status();
+			if (do_restart) {
+				sleep(1);
+				start_process();
+			}
+			continue;
+		}
+
+		// Was it a dependency?
+		int is_dependency = 0;
+		FOREACH_DEP(i) {
+			if (dependencies[i].pid == killed) {
+				dependencies[i].pid = -1;
+				dependency_count--;
+				if (dependencies[i].enlisted)
+					is_dependency = 1;
+				break;
+			}
+		}
+		if (is_dependency) {
+			fprintf(stderr, "dependency exited, reloading depends...\n");
+			reload_dependencies();
+		}
+	}
+}
+
+void on_sigusr1(int signo) {
+	(void) signo;
+	reload_dependencies();
+}
+
+void on_sigalarm(int signo) {
+	if (terminating)
+		return;
+	(void) signo;
+	reload_dependencies();
+	alarm(1);
 }
 
 void on_sigterm(int signo) {
