@@ -1,7 +1,8 @@
 CC      = cc
 CFLAGS  = -std=gnu99 -Wall -Wextra -O2
 LDFLAGS =
-TARGETS  = supervise waitsignal svc
+TARGETS = supervise svc waitsignal
+PREFIX  = /usr/local/share
 
 all: $(TARGETS)
 
@@ -13,3 +14,7 @@ compile_flags.txt:
 
 clean:
 	rm -f $(TARGETS)
+
+install: $(TARGETS)
+	install -d $(PREFIX)/bin
+	install -m 0755 $(TARGETS) $(PREFIX)/bin
