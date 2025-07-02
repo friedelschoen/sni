@@ -1,8 +1,8 @@
 CC      = cc
 CFLAGS  = -std=gnu99 -Wall -Wextra -O2
 LDFLAGS =
-TARGETS = supervise svc waitsignal
-MAN1    = supervise.1
+TARGETS = sni-supervise sni-svc sni-waitsignal
+MAN1    = sni-supervise.1
 MANUALS = $(MAN1) $(MAN8)
 PREFIX  = /usr/local/share
 

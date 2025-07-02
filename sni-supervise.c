@@ -255,7 +255,7 @@ void stop_process(int sig) {
 }
 
 void usage(int code) {
-	fprintf(stderr, "supervise [-C dir]");
+	fprintf(stderr, "sni-supervise [-C dir]");
 	exit(code);
 }
 

@@ -13,7 +13,7 @@ void handle_kill(int signo) {
 }
 
 void usage(int code) {
-	fprintf(stderr, "waitsignal [-n]");
+	fprintf(stderr, "sni-waitsignal [-n]");
 	exit(code);
 }
 

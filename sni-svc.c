@@ -123,7 +123,7 @@ void print_status(const char *path) {
 }
 
 void usage(int code) {
-	fprintf(stderr, "svc [-d <svdir>] [-w] [-r] [<service> [<command>]]\n");
+	fprintf(stderr, "sni-svc [-d <svdir>] [-w] [-r] [<service> [<command>]]\n");
 	exit(code);
 }
 
