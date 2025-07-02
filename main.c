@@ -29,14 +29,14 @@
 			for (int __once = (hits++, 0); __once < 1; __once++)
 
 
-struct depencency {
+struct dependency {
 	pid_t pid;
 	char  name[NAME_MAX];
 	int   enlisted; /* is seen */
 };
 
 const char       *self;
-struct depencency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
+struct dependency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
 int               dependency_count = 0;
 int               terminating      = 0;
 
@@ -419,6 +419,9 @@ int main(int argc, char **argv) {
 	const char *dir;
 	ARGBEGIN
 	switch (OPT) {
+		case 'h':
+			usage(0);
+			break;
 		case 'C':
 			dir = EARGF(usage(1));
 			if (chdir(dir) == -1) {
@@ -470,4 +473,6 @@ int main(int argc, char **argv) {
 	close(lockfd);
 	close(controlfd);
 	return 0;
+
+	shutdown_supervisor();
 }
