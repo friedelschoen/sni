@@ -1,18 +1,14 @@
 #include "arg.h"
 
 #include <ctype.h>
-#include <endian.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <linux/limits.h>
-#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -166,8 +162,8 @@ void reload_dependencies(void) {
 	if (!file)
 		return;
 
-	char line[LINE_MAX];
-	char path[LINE_MAX];
+	char line[NAME_MAX];
+	char path[PATH_MAX];
 	while (fgets(line, sizeof(line), file)) {
 		line[strcspn(line, "\n")] = '\0';
 

@@ -2,12 +2,12 @@
 
 #define SHIFT (argc--, argv++)
 
-#define ARGBEGIN                                       \
-	for (SHIFT; *argv && *argv[0] == '-'; SHIFT) {     \
-		if ((*argv)[1] == '-' && (*argv)[2] == '\0') { \
-			SHIFT;                                     \
-			break;                                     \
-		}                                              \
+#define ARGBEGIN                                                  \
+	for (SHIFT; *argv && *argv[0] == '-'; SHIFT, ((void) argc)) { \
+		if ((*argv)[1] == '-' && (*argv)[2] == '\0') {            \
+			SHIFT;                                                \
+			break;                                                \
+		}                                                         \
 		for (char *opt = *argv + 1; *opt; opt++) {
 
 #define ARGEND \
