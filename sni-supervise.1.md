@@ -1,20 +1,20 @@
 ---
-title: supervise
+title: sni-supervise
 section: 8
 date: 2025-07-02
 ---
 
 # NAME
 
-**supervise** – small dependency-aware service supervisor
+**sni-supervise** – supervise-not-init - supervisor
 
 # SYNOPSIS
 
-**supervise** [-h] [-C _dir_]
+**sni-supervise** [-h] [-C _dir_]
 
 # DESCRIPTION
 
-**supervise** starts a small, robust process supervisor for the current directory or given service directory.
+**sni-supervise** starts a small, robust process supervisor for the current directory or given service directory.
 
 Each service is expected to contain:
 
@@ -70,7 +70,7 @@ Returns 1 on error or setup failure.
 
 # SEE ALSO
 
-**svc(8)**, **waitsignal(1)**
+**sni-svc(8)**, **sni-waitsignal(1)**, **sni(5)**
 
 # AUTHOR
 
