@@ -303,6 +303,26 @@ void on_sigalarm(int signo) {
 	alarm(1);
 }
 
+void shutdown_supervisor(void) {
+	do_restart = 0;
+
+	FOREACH_DEP(i) {
+		if (dependencies[i].pid != -1) {
+			kill(dependencies[i].pid, SIGTERM);
+			waitpid(dependencies[i].pid, NULL, 0);
+			dependencies[i].pid = -1;
+		}
+	}
+
+	if (process != 0) {
+		kill(process, SIGTERM);
+		waitpid(process, NULL, 0);
+		process       = 0;
+		status_change = time(NULL);
+		write_status();
+	}
+}
+
 void handle_command(char chr) {
 	fprintf(stderr, "command %c\n", chr);
 	switch (chr) {
@@ -346,7 +366,7 @@ void handle_command(char chr) {
 			stop_process(SIGUSR2);
 			break;
 		case 'x':
-			exit(0);
+			shutdown_supervisor();
 			break;
 	}
 }
@@ -374,26 +394,6 @@ void read_control_loop(void) {
 		}
 
 		close(fd);
-	}
-}
-
-void shutdown_supervisor(void) {
-	do_restart = 0;
-
-	FOREACH_DEP(i) {
-		if (dependencies[i].pid != -1) {
-			kill(dependencies[i].pid, SIGTERM);
-			waitpid(dependencies[i].pid, NULL, 0);
-			dependencies[i].pid = -1;
-		}
-	}
-
-	if (process != 0) {
-		kill(process, SIGTERM);
-		waitpid(process, NULL, 0);
-		process       = 0;
-		status_change = time(NULL);
-		write_status();
 	}
 }
 
@@ -477,7 +477,6 @@ int main(int argc, char **argv) {
 	// on exit
 	close(lockfd);
 	close(controlfd);
-	return 0;
 
 	shutdown_supervisor();
 }
