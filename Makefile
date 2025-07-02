@@ -1,7 +1,7 @@
 CC      = cc
 CFLAGS  = -std=gnu99 -Wall -Wextra -O2
 LDFLAGS =
-TARGET  = supervise
+TARGET  = supervise waitsignal
 SRC     = supervise.c
 
 all: $(TARGET)
