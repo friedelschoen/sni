@@ -1,16 +1,15 @@
 CC      = cc
 CFLAGS  = -std=gnu99 -Wall -Wextra -O2
 LDFLAGS =
-TARGET  = supervise waitsignal
-SRC     = supervise.c
+TARGETS  = supervise waitsignal svc
 
-all: $(TARGET)
+all: $(TARGETS)
 
-$(TARGET): $(SRC)
+%: %.c
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 compile_flags.txt:
 	echo $(CFLAGS) | tr ' ' '\n' > $@
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGETS)
