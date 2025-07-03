@@ -1,15 +1,11 @@
 #include "arg.h"
 
-#include <bits/stdint-uintn.h>
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -94,6 +90,7 @@ void print_status(const char *path) {
 	int  paused   = buf[16];
 	char want     = buf[17];
 	int  signaled = buf[18];
+	int  state    = buf[19];
 
 	const char *name = strrchr(path, '/');
 	if (name == NULL)
@@ -102,7 +99,7 @@ void print_status(const char *path) {
 		name++;
 
 	printf("%s: ", name);
-	if (pid == 0) {
+	if (state == 0) {
 		printf("down");
 		if (want == 'u') {
 			printf(", but wants up");
@@ -111,7 +108,7 @@ void print_status(const char *path) {
 			printf(", terminated");
 		}
 	} else {
-		printf("up as %d", pid);
+		printf("%s as %d", state == 1 ? "run" : "finish", pid);
 		if (want == 'd') {
 			printf(", but wants down");
 		}

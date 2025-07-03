@@ -2,7 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <linux/limits.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +15,6 @@
 
 #define TAI_OFFSET       4611686018427387914ULL
 #define MAX_DEPENDENCIES 128
-#define LINE_MAX         512
 
 #define FOREACH_DEP(i)                                                              \
 	for (int i = 0, hits = 0; i < MAX_DEPENDENCIES && hits < dependency_count; i++) \
@@ -35,6 +34,7 @@ const char       *self;
 struct dependency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
 int               dependency_count = 0;
 int               terminating      = 0;
+int               finishing        = 0;
 
 pid_t  process       = 0;
 time_t status_change = 0;
@@ -105,8 +105,13 @@ void write_status(void) {
 	buffer[17] = do_restart ? 'u' : 'd';
 	/* was terminated */
 	buffer[18] = WIFSIGNALED(exitstatus) && WTERMSIG(exitstatus) == SIGTERM;
-	/* runit-state */
-	buffer[19] = process != 0;
+	/* state */
+	if (process == 0)
+		buffer[19] = 0;
+	else if (!finishing)
+		buffer[19] = 1;
+	else
+		buffer[19] = 2;
 
 
 	FILE *f = fopen("supervise/status", "w");
@@ -123,11 +128,12 @@ void write_status(void) {
 		perror("fopen status");
 		return;
 	}
-	if (process == 0) {
+	if (process == 0)
 		fprintf(f, "down");
-	} else {
+	else if (!finishing)
 		fprintf(f, "run");
-	}
+	else
+		fprintf(f, "finish");
 	fclose(f);
 
 	f = fopen("supervise/pid", "w");
@@ -243,6 +249,23 @@ void start_process(void) {
 		_exit(127);
 	}
 
+	process       = pid;
+	status_change = time(NULL);
+	write_status();
+}
+
+void start_finish(void) {
+	if (process != 0)
+		return;
+
+	pid_t pid = must_fork();
+	if (pid == 0) {
+		execl("./finish", "./finish", NULL);
+		perror("execlp");
+		_exit(127);
+	}
+
+	finishing     = 1;
 	process       = pid;
 	status_change = time(NULL);
 	write_status();
@@ -370,10 +393,17 @@ void on_sigchild(int signo) {
 			process       = 0;
 			paused        = 0;
 			status_change = time(NULL);
-			write_status();
-			if (do_restart) {
-				sleep(1);
-				start_process();
+
+			if (!finishing && access("finish", X_OK) == 0) {
+				start_finish();
+			} else {
+				finishing = 0;
+				write_status();
+
+				if (do_restart) {
+					sleep(1);
+					start_process();
+				}
 			}
 			continue;
 		}

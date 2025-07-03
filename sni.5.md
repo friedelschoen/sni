@@ -10,8 +10,9 @@ date: 2025-07-02
 
 # SYNOPSIS
 
-<service>/depends
 <service>/run
+<service>/finish
+<service>/depends
 <service>/supervise/
 <service>/supervise/control
 <service>/supervise/lock
@@ -24,77 +25,85 @@ date: 2025-07-02
 
 ## run
 
-This is a long-running script, which is expected to run alongside the daemon.
+A long-running script expected to start and monitor the daemon. It is executed directly and should not daemonize or fork. The script should `exec` the actual process.
+
+## finish
+
+A short script which is expected to clean-up the service or stop the background-daemon when `exec`'ing to `sni-waitpid`.
 
 ## depends
 
-A newline-terminated list of dependencies of a service which it depends on. This service is located in the parent directory of the service. It only starts the supervisor and will start a dependency almost simultaneously. If the service depends on the actual state of the service (booted up or builded, etc.), consider a more complex technique in the scripts.
+A newline-separated list of service dependencies. Each listed service is expected to reside in the parent directory of the current service.
 
-Leading and trailing whitespaces are stripped, also characters after a `#` is considered a comment and is stripped.
+Dependencies are started concurrently with the current service, but **no guarantee is made** about readiness. If the service depends on the state of another (e.g., fully started or ready), more advanced coordination must be implemented in the scripts themselves.
+
+Leading/trailing whitespace is stripped, and anything following a `#` is considered a comment and ignored.
 
 ## supervise/
 
-A directory created by sni-supervise(8). It is only created when non-existing, if sni-* is running on a read-only filesystem, you can symlink `supervise/` to a temporary or writable filesystem.
+A directory created by `sni-supervise(8)`. If the filesystem is read-only, this directory can be symlinked to a writable location (e.g., `/tmp`).
 
 ## supervise/lock
 
-This empty file is created to forbid multiple supervisors on one service. This is done by lockf(3), which releases a lock whenever the supervisor exits.
+An empty file used to prevent multiple supervisors from managing the same service. A file lock is acquired via `lockf(3)`, which is automatically released if the supervisor exits.
 
 ## supervise/ok
 
-This is a FIFO (or named pipe) which is opened read-only. This file is used by runit-sv to check liveness but unused by sni-svc(8).
+A FIFO (named pipe) opened read-only. Used by some tools (e.g., `runit-sv`) to detect liveness. Currently unused by `sni-svc(8)`.
 
 ## supervise/status
 
-This file hold the current state of the service. This used a 20-byte long machine-readable format and is also used in runit and daemontools.
+Contains the current service state in a fixed 20-byte binary format, compatible with `runit` and `daemontools`.
 
 ```
+
 +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 |     STATUS CHANGE     |  NANOSEC  |    PID    |PS|WU|TR|SR|
 +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
 ```
 
-- STATUS CHANGE: unix seconds + 4611686018427387914ULL (tai, lower endian)
-- NANOSEC: unix nanoseconds (unused by sni)
-- PID = current pid (big endian)
-- PS = is paused (int boolean)
-- WU = wants up ('u' if want up, 'd' if want down)
-- SR = state runit (0 is down, 1 is running, 2 if finishing in runit and daemontools)
-- TR = was terminated (int boolean)
+- **STATUS CHANGE**: TAI64 timestamp (Unix seconds + `4611686018427387914ULL`, little endian)
+- **NANOSEC**: Nanoseconds field (currently unused by `sni`)
+- **PID**: Current process ID (big endian)
+- **PS**: Paused status (0 or 1)
+- **WU**: Desired state ('u' for up, 'd' for down)
+- **TR**: Termination status (1 if last exit was due to SIGTERM)
+- **SR**: Run state (0 = down, 1 = running, 2 = finish)
 
 ## supervise/stat
 
-This file describes human-readable the current state, which is either 'run' or 'down'.
+Contains a human-readable state string: either `run`, `finish` or `down`.
 
 ## supervise/pid
 
-This file describes human-readable the current pid or 0 when no process is running.
+Contains the process ID of the running service, or `0` if no process is active.
 
 ## supervise/control
 
-This FIFO (or named pipe) accepts one-byte commands to control the service-state. Following commands are understood:
+A FIFO (named pipe) that accepts single-byte commands to control the service. Supported commands:
 
 | Command | Description                           |
 | ------- | ------------------------------------- |
-| `u`     | start service and do restart          |
-| `d`     | terminate service and stop restarting |
-| `o`     | start service and stop restarting     |
-| `t`     | send SIGTERM to service               |
-| `p`     | send SIGSTOP to service               |
-| `c`     | send SIGCONT to service               |
-| `a`     | send SIGALRM to service               |
-| `h`     | send SIGHUP to service                |
-| `i`     | send SIGINT to service                |
-| `q`     | send SIGQUIT to service               |
-| `1`     | send SIGUSR1 to service               |
-| `2`     | send SIGUSR2 to service               |
-| `x`     | quit supervise instance               |
+| `u`     | Start service and enable restarts     |
+| `d`     | Terminate service and disable restart |
+| `o`     | Start service once (no restart)       |
+| `t`     | Send `SIGTERM` to the service         |
+| `p`     | Send `SIGSTOP` (pause)                |
+| `c`     | Send `SIGCONT` (resume)               |
+| `a`     | Send `SIGALRM`                        |
+| `h`     | Send `SIGHUP`                         |
+| `i`     | Send `SIGINT`                         |
+| `q`     | Send `SIGQUIT`                        |
+| `1`     | Send `SIGUSR1`                        |
+| `2`     | Send `SIGUSR2`                        |
+| `x`     | Stop and exit the supervisor process  |
 
-Invalid characters are ignored.
+Unrecognized commands are ignored.
 
 # SEE ALSO
 
-**svc(8)**, **waitsignal(1)**
+**sni-svc(8)**, **waitsignal(1)**
 
 # AUTHOR
 
