@@ -1,12 +1,12 @@
 ---
 title: sni-supervise
 section: 8
-date: 2025-07-02
+date: July 2025
 ---
 
 # NAME
 
-**sni-supervise** – supervise-not-init - supervisor
+**sni-supervise** – supervise services
 
 # SYNOPSIS
 

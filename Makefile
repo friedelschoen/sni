@@ -2,8 +2,9 @@ CC      = cc
 CFLAGS  = -std=gnu99 -Wall -Wextra -O2
 LDFLAGS =
 TARGETS = sni-supervise sni-svc sni-waitsignal
-MAN1    = sni-supervise.1
+MAN1    = sni-waitsignal.1
 MAN5    = sni.5
+MAN8    = sni-supervise.8 sni-svc.8
 MANUALS = $(MAN1) $(MAN5) $(MAN8)
 PREFIX  = /usr/local/share
 
@@ -13,7 +14,7 @@ all: $(TARGETS) $(MANUALS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 %: %.md
-	lowdown -tman -o $@ $^
+	lowdown -stman -o $@ $^
 
 compile_flags.txt:
 	echo $(CFLAGS) | tr ' ' '\n' > $@

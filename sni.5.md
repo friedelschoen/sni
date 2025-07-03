@@ -1,7 +1,7 @@
 ---
 title: sni
 section: 5
-date: 2025-07-02
+date: July 2025
 ---
 
 # NAME
@@ -10,6 +10,7 @@ date: 2025-07-02
 
 # SYNOPSIS
 
+```
 <service>/run
 <service>/finish
 <service>/depends
@@ -20,6 +21,7 @@ date: 2025-07-02
 <service>/supervise/pid
 <service>/supervise/stat
 <service>/supervise/status
+```
 
 # DESCRIPTION
 
@@ -42,14 +44,6 @@ Leading/trailing whitespace is stripped, and anything following a `#` is conside
 ## supervise/
 
 A directory created by `sni-supervise(8)`. If the filesystem is read-only, this directory can be symlinked to a writable location (e.g., `/tmp`).
-
-## supervise/lock
-
-An empty file used to prevent multiple supervisors from managing the same service. A file lock is acquired via `lockf(3)`, which is automatically released if the supervisor exits.
-
-## supervise/ok
-
-A FIFO (named pipe) opened read-only. Used by some tools (e.g., `runit-sv`) to detect liveness. Currently unused by `sni-svc(8)`.
 
 ## supervise/status
 
@@ -100,6 +94,14 @@ A FIFO (named pipe) that accepts single-byte commands to control the service. Su
 | `x`     | Stop and exit the supervisor process  |
 
 Unrecognized commands are ignored.
+
+## supervise/lock
+
+An empty file used to prevent multiple supervisors from managing the same service. A file lock is acquired via `lockf(3)`, which is automatically released if the supervisor exits.
+
+## supervise/ok
+
+A FIFO (named pipe) opened read-only. Used by some tools (e.g., `runit-sv`) to detect liveness. Currently unused by `sni-svc(8)`.
 
 # SEE ALSO
 
