@@ -28,6 +28,9 @@ int main(int argc, char **argv) {
 		case 'n':
 			printname++;
 			break;
+		default:
+			fprintf(stderr, "error: unknown option -%c.\n", OPT);
+			usage(1);
 	}
 	ARGEND
 

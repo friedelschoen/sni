@@ -476,6 +476,9 @@ int main(int argc, char **argv) {
 				exit(1);
 			}
 			break;
+		default:
+			fprintf(stderr, "error: unknown option -%c.\n", OPT);
+			usage(1);
 	}
 	ARGEND
 

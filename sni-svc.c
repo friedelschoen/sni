@@ -144,6 +144,9 @@ int main(int argc, char *argv[]) {
 		case 'd':
 			svdir = EARGF(usage(1));
 			break;
+		default:
+			fprintf(stderr, "error: unknown option -%c.\n", OPT);
+			usage(1);
 	}
 	ARGEND
 
