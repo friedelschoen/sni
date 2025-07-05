@@ -489,6 +489,7 @@ int main(int argc, char **argv) {
 	}
 
 	if (has_lock(NULL)) {
+		fprintf(stderr, "sni-supervise already running\n");
 		return 0;
 	}
 
