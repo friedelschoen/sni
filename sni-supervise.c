@@ -31,7 +31,7 @@ struct dependency {
 	int   enlisted; /* is seen */
 };
 
-const char       *self;
+char              self[PATH_MAX];
 struct dependency dependencies[MAX_DEPENDENCIES]; /* -1 is unset */
 int               dependency_count = 0;
 int               terminating      = 0;
@@ -209,8 +209,7 @@ void reload_dependencies(void) {
 
 		pid_t pid = must_fork();
 		if (pid == 0) {
-			chdir(path);
-			execlp(self, self, NULL);
+			execlp(self, self, "-C", path, NULL);
 			perror("execlp");
 			_exit(127);
 		}
@@ -449,7 +448,9 @@ void on_sigterm(int signo) {
 }
 
 int main(int argc, char **argv) {
-	self          = argv[0];
+	if (realpath(argv[0], self) == NULL)
+		strncpy(self, argv[0], sizeof(self));
+
 	status_change = time(NULL);
 
 	for (int i = 0; i < MAX_DEPENDENCIES; i++) {
@@ -517,7 +518,11 @@ int main(int argc, char **argv) {
 
 	if (getenv("SNIDIR") == NULL) {
 		char snidir[PATH_MAX];
-		setenv("SNIDIR", realpath("..", "snidir"), 1);
+		if (realpath("..", snidir) == NULL) {
+			perror("realpath");
+		} else {
+			setenv("SNIDIR", snidir, 1);
+		}
 	}
 
 	reload_dependencies();
