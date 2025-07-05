@@ -126,7 +126,9 @@ void usage(int code) {
 
 int main(int argc, char *argv[]) {
 	int         termfirst = 0, waitchange = 0;
-	const char *svdir = getenv("SVDIR");
+	const char *svdir = getenv("SNIDIR");
+	if (svdir == NULL)
+		svdir = getenv("SVDIR");
 	if (svdir == NULL)
 		svdir = ".";
 

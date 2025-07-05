@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <linux/limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -511,6 +512,11 @@ int main(int argc, char **argv) {
 		perror("open ok");
 		close(lockfd);
 		return 1;
+	}
+
+	if (getenv("SNIDIR") == NULL) {
+		char snidir[PATH_MAX];
+		setenv("SNIDIR", realpath("..", "snidir"), 1);
 	}
 
 	reload_dependencies();
